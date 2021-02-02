@@ -76,6 +76,8 @@ var commands = map[string]bool{
 	"QUIT":     true,
 	"TURN":     true,
 	"STARTTLS": true,
+//add auth command by elephacking
+	"AUTH":     true,
 }
 
 // Session holds the state of an SMTP session
@@ -263,6 +265,8 @@ func (s *Session) greetHandler(cmd string, arg string) {
 		if s.Server.config.TLSEnabled && s.Server.tlsConfig != nil && s.tlsState == nil {
 			s.send("250-STARTTLS")
 		}
+		// added server response accepting auth
+		s.send("250-AUTH PLAIN")
 		s.send(fmt.Sprintf("250 SIZE %v", s.config.MaxMessageBytes))
 		s.enterState(READY)
 	default:
@@ -305,6 +309,22 @@ func (s *Session) readyHandler(cmd string, arg string) {
 		s.tlsState = new(tls.ConnectionState)
 		*s.tlsState = tlsConn.ConnectionState()
 		s.enterState(GREET)
+	} else if cmd == "AUTH" {
+		// add accepting auth without caring about the input
+		s.logger.Debug().Msgf("User AUTH for SMTP: %q", arg)
+		if strings.Contains(arg, " ") {
+			s.logger.Debug().Msgf("User AUTH PW for SMTP: %q", arg)
+			s.send("235 2.7.0 Authentication successful")
+			s.logger.Debug().Msg("235 2.7.0 Authentication successful")
+		} else {
+			s.send("334 ")
+			pw, err := s.readLine()
+			if err == nil {
+				s.logger.Debug().Msgf("User AUTH PW for SMTP: %q", pw)
+				s.send("235 2.7.0 Authentication successful")
+				s.logger.Debug().Msg("235 2.7.0 Authentication successful")
+			}
+		}
 	} else if cmd == "MAIL" {
 		// Capture group 1: from address.  2: optional params.
 		m := fromRegex.FindStringSubmatch(arg)
